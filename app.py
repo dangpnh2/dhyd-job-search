@@ -1,22 +1,21 @@
-from flask import Flask, render_template, request, jsonify, redirect, url_for
-import pandas as pd
-import csv
+from flask import Flask, render_template, request, jsonify
+from supabase import create_client
+from dotenv import load_dotenv
 import os
-from datetime import datetime
+
+load_dotenv()
 
 app = Flask(__name__)
 
-JOBS_CSV = "data/jobs.csv"
-APPLICATIONS_CSV = "data/applications.csv"
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+
+supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 
-def load_jobs():
-    if not os.path.exists(JOBS_CSV):
-        return pd.DataFrame()
-
-    df = pd.read_csv(JOBS_CSV)
-    df = df.fillna("")
-    return df
+def load_jobs_from_supabase():
+    response = supabase.table("jobs").select("*").execute()
+    return response.data
 
 
 @app.route("/")
@@ -27,35 +26,38 @@ def home():
 @app.route("/search")
 def search_jobs():
     keyword = request.args.get("keyword", "").strip().lower()
-    df = load_jobs()
 
-    if df.empty:
-        jobs = []
-    elif keyword == "":
-        jobs = df.to_dict(orient="records")
-    else:
-        mask = (
-            df["title"].astype(str).str.lower().str.contains(keyword, na=False)
-            | df["company"].astype(str).str.lower().str.contains(keyword, na=False)
-            | df["description"].astype(str).str.lower().str.contains(keyword, na=False)
-            | df["location"].astype(str).str.lower().str.contains(keyword, na=False)
-        )
-        jobs = df[mask].to_dict(orient="records")
+    jobs = load_jobs_from_supabase()
+    if keyword:
+        jobs = [
+            job for job in jobs
+            if keyword in str(job.get("title", "")).lower()
+            or keyword in str(job.get("company", "")).lower()
+            or keyword in str(job.get("location", "")).lower()
+            or keyword in str(job.get("description", "")).lower()
+        ]
 
     return render_template("search.html", jobs=jobs, keyword=keyword)
 
 
 @app.route("/job/<job_id>")
 def job_detail(job_id):
-    df = load_jobs()
+    response = (
+        supabase
+        .table("jobs")
+        .select("*")
+        .eq("id", job_id)
+        .single()
+        .execute()
+    )
 
-    job_row = df[df["id"].astype(str) == str(job_id)]
+    job = response.data
 
-    if job_row.empty:
+    if not job:
         return "Job not found", 404
 
-    job = job_row.iloc[0].to_dict()
     return render_template("job_detail.html", job=job)
+
 
 @app.route("/apply", methods=["POST"])
 def apply():
@@ -69,48 +71,28 @@ def apply():
     if not name or not email or not phone:
         return jsonify({"success": False, "message": "Missing required fields"}), 400
 
-    df = load_jobs()
-    job_row = df[df["id"].astype(str) == str(job_id)]
+    job_response = (
+        supabase
+        .table("jobs")
+        .select("*")
+        .eq("id", job_id)
+        .single()
+        .execute()
+    )
 
-    if job_row.empty:
+    job = job_response.data
+
+    if not job:
         return jsonify({"success": False, "message": "Job not found"}), 404
 
-    job = job_row.iloc[0].to_dict()
-
-    file_exists = os.path.exists(APPLICATIONS_CSV)
-    file_empty = (not file_exists) or os.path.getsize(APPLICATIONS_CSV) == 0
-
-    # Ensure existing file ends with newline before appending
-    if file_exists and not file_empty:
-        with open(APPLICATIONS_CSV, "rb+") as f:
-            f.seek(-1, os.SEEK_END)
-            last_char = f.read(1)
-            if last_char != b"\n":
-                f.write(b"\n")
-
-    with open(APPLICATIONS_CSV, "a", newline="", encoding="utf-8") as f:
-        writer = csv.writer(f)
-
-        if file_empty:
-            writer.writerow([
-                "timestamp",
-                "job_id",
-                "job_title",
-                "company",
-                "name",
-                "email",
-                "phone"
-            ])
-
-        writer.writerow([
-            datetime.now().isoformat(timespec="seconds"),
-            job_id,
-            job.get("title", ""),
-            job.get("company", ""),
-            name,
-            email,
-            phone
-        ])
+    supabase.table("applications").insert({
+        "job_id": str(job_id),
+        "job_title": job.get("title", ""),
+        "company": job.get("company", ""),
+        "name": name,
+        "email": email,
+        "phone": phone
+    }).execute()
 
     return jsonify({"success": True, "message": "Application saved"})
 
