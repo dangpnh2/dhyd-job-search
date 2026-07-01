@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>{{ job.title }}</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<div class="detail-page">
+    <a href="/">← Back to search</a>
+
+    <h1>{{ job.title }}</h1>
+    <h3>{{ job.company }}</h3>
+
+    <p>{{ job.location }} • {{ job.workplace_type }} • {{ job.job_type }}</p>
+    <p><strong>Posted:</strong> {{ job.posted_date }}</p>
+
+    <hr>
+
+    <h2>About the job</h2>
+    <p>{{ job.description }}</p>
+
+    <button onclick="openApplyModal()" class="apply-btn">Apply</button>
+</div>
+
+<div id="applyModal" class="modal hidden">
+    <div class="modal-content">
+        <h2>Apply for this job</h2>
+
+        <input id="name" type="text" placeholder="Your name">
+        <input id="email" type="email" placeholder="Your email">
+        <input id="phone" type="text" placeholder="Your phone">
+
+        <div class="modal-buttons">
+            <button onclick="submitApplication()">Submit</button>
+            <button onclick="closeApplyModal()">Cancel</button>
+        </div>
+
+        <p id="message"></p>
+    </div>
+</div>
+
+<script>
+const jobId = "{{ job.id }}";
+
+function openApplyModal() {
+    document.getElementById("applyModal").classList.remove("hidden");
+}
+
+function closeApplyModal() {
+    document.getElementById("applyModal").classList.add("hidden");
+}
+
+function submitApplication() {
+    const name = document.getElementById("name").value;
+    const email = document.getElementById("email").value;
+    const phone = document.getElementById("phone").value;
+
+    fetch("/apply", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+            job_id: jobId,
+            name: name,
+            email: email,
+            phone: phone
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        document.getElementById("message").innerText = data.message;
+
+        if (data.success) {
+            setTimeout(() => {
+                closeApplyModal();
+            }, 1000);
+        }
+    })
+    .catch(error => {
+        document.getElementById("message").innerText = "Error saving application.";
+    });
+}
+</script>
+
+</body>
+</html>

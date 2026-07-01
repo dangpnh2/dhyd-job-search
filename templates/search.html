@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Job Search</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<div class="search-page">
+    <h1>Job Search</h1>
+
+    <form action="/search" method="GET" class="search-box">
+        <input 
+            type="text" 
+            name="keyword" 
+            placeholder="Search jobs by keyword..."
+            value="{{ keyword if keyword else '' }}"
+        >
+        <button type="submit">Search</button>
+    </form>
+
+    {% if jobs is defined %}
+        <h2>{{ jobs|length }} result(s)</h2>
+
+        <div class="job-list">
+            {% for job in jobs %}
+                <div class="job-card">
+                    <h3>{{ job.title }}</h3>
+                    <p><strong>{{ job.company }}</strong></p>
+                    <p>{{ job.location }} • {{ job.workplace_type }} • {{ job.job_type }}</p>
+                    <p>{{ job.description[:180] }}...</p>
+                    <a href="/job/{{ job.id }}">View Job</a>
+                </div>
+            {% endfor %}
+        </div>
+    {% endif %}
+</div>
+
+</body>
+</html>
